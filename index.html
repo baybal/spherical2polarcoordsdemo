@@ -1,0 +1,252 @@
+<link rel="stylesheet" href="main.css" />
+<script src="bundle.js"></script>
+<script>
+	/* global L, cloneLayer */
+	function clone(obj) {
+		var copy;
+		// Handle the 3 simple types, and null or undefined
+		if (null == obj || "object" != typeof obj) return obj;
+		// Handle Date
+		if (obj instanceof Date) {
+			copy = new Date();
+			copy.setTime(obj.getTime());
+			return copy;
+		}
+		// Handle Array
+		if (obj instanceof Array) {
+			copy = [];
+			for (var i = 0, len = obj.length; i < len; i++) {
+				copy[i] = clone(obj[i]);
+			}
+			return copy;
+		}
+		// Handle Object
+		if (obj instanceof Object) {
+			copy = {};
+			for (var attr in obj) {
+				if (obj.hasOwnProperty(attr)) copy[attr] = clone(obj[attr]);
+			}
+			return copy;
+		}
+		throw new Error("Unable to copy obj! Its type isn't supported.");
+	}
+	var maps = window.maps = [];
+
+	function deg_rad(ang) {
+		return ang * (Math.PI / 180.0)
+	}
+
+	function merc_x(lon) {
+		var r_major = 6378137.000;
+		return r_major * deg_rad(lon);
+	}
+
+	function merc_y(lat) {
+		if (lat > 89.5) lat = 89.5;
+		if (lat < -89.5) lat = -89.5;
+		var r_major = 6378137.000;
+		var r_minor = 6356752.3142;
+		var temp = r_minor / r_major;
+		var es = 1.0 - (temp * temp);
+		var eccent = Math.sqrt(es);
+		var phi = deg_rad(lat);
+		var sinphi = Math.sin(phi);
+		var con = eccent * sinphi;
+		var com = .5 * eccent;
+		con = Math.pow((1.0 - con) / (1.0 + con), com);
+		var ts = Math.tan(.5 * (Math.PI * 0.5 - phi)) / con;
+		var y = 0 - r_major * Math.log(ts);
+		return y;
+	}
+
+	function merc(x, y) {
+		return [merc_x(x), merc_y(y)];
+	}
+
+	function deg_rad(ang) {
+		return ang * (Math.PI / 180.0)
+	}
+
+	function merc_x(lon) {
+		var r_major = 6378137.000;
+		return r_major * deg_rad(lon);
+	}
+
+	function merc_y(lat) {
+		if (lat > 89.5) lat = 89.5;
+		if (lat < -89.5) lat = -89.5;
+		var r_major = 6378137.000;
+		var r_minor = 6356752.3142;
+		var temp = r_minor / r_major;
+		var es = 1.0 - (temp * temp);
+		var eccent = Math.sqrt(es);
+		var phi = deg_rad(lat);
+		var sinphi = Math.sin(phi);
+		var con = eccent * sinphi;
+		var com = .5 * eccent;
+		con = Math.pow((1.0 - con) / (1.0 + con), com);
+		var ts = Math.tan(.5 * (Math.PI * 0.5 - phi)) / con;
+		var y = 0 - r_major * Math.log(ts);
+		return y;
+	}
+
+	function merc(x, y) {
+		return [merc_x(x), merc_y(y)];
+	}
+	var Conv = ({
+		r_major: 6378137.0, //Equatorial Radius, WGS84
+		r_minor: 6356752.314245179, //defined as constant
+		f: 298.257223563, //1/f=(a-b)/a , a=r_major, b=r_minor
+		deg2rad: function(d) {
+			var r = d * (Math.PI / 180.0);
+			return r;
+		},
+		rad2deg: function(r) {
+			var d = r / (Math.PI / 180.0);
+			return d;
+		},
+		ll2m: function(lon, lat) //lat lon to mercator
+		{
+			//lat, lon in rad
+			var x = this.r_major * this.deg2rad(lon);
+			if (lat > 89.5) lat = 89.5;
+			if (lat < -89.5) lat = -89.5;
+			var temp = this.r_minor / this.r_major;
+			var es = 1.0 - (temp * temp);
+			var eccent = Math.sqrt(es);
+			var phi = this.deg2rad(lat);
+			var sinphi = Math.sin(phi);
+			var con = eccent * sinphi;
+			var com = .5 * eccent;
+			var con2 = Math.pow((1.0 - con) / (1.0 + con), com);
+			var ts = Math.tan(.5 * (Math.PI * 0.5 - phi)) / con2;
+			var y = 0 - this.r_major * Math.log(ts);
+			var ret = { 'x': x, 'y': y };
+			return ret;
+		},
+		m2ll: function(x, y) //mercator to lat lon
+		{
+			var lon = this.rad2deg((x / this.r_major));
+			var temp = this.r_minor / this.r_major;
+			var e = Math.sqrt(1.0 - (temp * temp));
+			var lat = this.rad2deg(this.pj_phi2(Math.exp(0 - (y / this.r_major)), e));
+			var ret = { 'lon': lon, 'lat': lat };
+			return ret;
+		},
+		pj_phi2: function(ts, e) {
+			var N_ITER = 15;
+			var HALFPI = Math.PI / 2;
+			var TOL = 0.0000000001;
+			var eccnth, Phi, con, dphi;
+			var i;
+			var eccnth = .5 * e;
+			Phi = HALFPI - 2. * Math.atan(ts);
+			i = N_ITER;
+			do {
+				con = e * Math.sin(Phi);
+				dphi = HALFPI - 2. * Math.atan(ts * Math.pow((1. - con) / (1. + con), eccnth)) - Phi;
+				Phi += dphi;
+			}
+			while (Math.abs(dphi) > TOL && --i);
+			return Phi;
+		}
+	});
+	var mercator = Conv.ll2m(47.6035525, 9.770602); //output mercator.x, mercator.y
+	var latlon = Conv.m2ll(5299424.36041, 1085840.05328); //output latlon.lat, latlon.lon
+	var RAD2DEG = 180 / Math.PI;
+	var PI_4 = Math.PI / 4;
+	var y2lat = window.y2lat = function(y) { return (Math.atan(Math.exp(y / RAD2DEG)) / PI_4 - 1) * 90; };
+	var lat2y = window.lat2y = function(lat) { return Math.log(Math.tan((lat / 90 + 1) * PI_4)) * RAD2DEG; };
+	// instead of import {} from 'leaflet-geosearch', use the `window` global
+	var GeoSearchControl = window.GeoSearch.GeoSearchControl;
+	var OpenStreetMapProvider = window.GeoSearch.OpenStreetMapProvider;
+	// remaining is the same as in the docs, accept for the var instead of const declarations
+	var provider = new OpenStreetMapProvider();
+
+	function main() {
+		document.getElementById('b1').addEventListener("click", coords);
+		document.removeEventListener("DOMContentLoaded", main);
+		for (var i of [0, 1]) {
+			maps[i] = L.map('map' + i).setView([51.505, -0.09], 13);
+			L.tileLayer('https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', {
+				maxZoom: 18
+			}).addTo(maps[i]);
+			maps[i].addControl(new GeoSearchControl({
+				provider: provider
+			}));
+			maps[i].l = new L.FeatureGroup();
+			maps[i].addLayer(maps[i].l);
+		}
+		maps[0].addControl(new L.Control.Draw({
+			position: 'topleft',
+			edit: {
+				featureGroup: maps[0].l,
+				remove: false
+			}
+		}));
+		maps[0].on(L.Draw.Event.CREATED, (e) => {
+			maps[0].l.addLayer(e.layer);
+			var c0 = maps[0].getCenter();
+			var c1 = maps[1].getCenter();
+			var diffmap = e.layer.editing.latlngs[0][0].map(i => {
+				let c = (1 + 0.00001120378 * (Math.cos(2 * i.lat / RAD2DEG) - 1)) / Math.cos(i.lat / RAD2DEG);
+				console.log('c', c, (i.lng - c0.lng) / c);
+				return { lat: i.lat - c0.lat, lng: (i.lng - c0.lng) / c / c };
+			});
+			var reversediffmap = diffmap.map(i => {
+				let c = (1 + 0.00001120378 * (Math.cos(2 * (i.lat + c1.lat) / RAD2DEG) - 1)) / Math.cos((i.lat + c1.lat) / RAD2DEG);
+				console.log('c', c, i.lng * c);
+				return { lat: i.lat + c1.lat, lng: (i.lng * c * c) + c1.lng };
+			});
+			var newE = cloneLayer(e.layer);
+			var earr = newE.editing.latlngs[0][0];
+			for (var i in earr) {
+				earr[i].lat = reversediffmap[i].lat;
+				earr[i].lng = reversediffmap[i].lng;
+			}
+			maps[1].l.addLayer(newE);
+			console.log(e.layer.editing.latlngs[0][0], reversediffmap);
+		});
+	}
+	var polygon = window.polygon = [
+		[-0.003999999999997783, 0.012],
+		[0.0020000000000024443, -0.010],
+		[-0.0049999999999954525, -0.018]
+	];
+
+	function coords() {
+		let c1 = maps[0].getCenter();
+		let c2 = maps[1].getCenter();
+		console.log(c1, c2);
+		L.polygon(polygon.map(i => [i[0] + c1.lat, c1.lng + i[1] * (1 / Math.cos(c1.lat / RAD2DEG)) * (1 / Math.cos(c1.lat / RAD2DEG))])).addTo(maps[0]);
+		L.polygon(polygon.map(i => [i[0] + c2.lat, c2.lng + i[1] * (1 / Math.cos(c2.lat / RAD2DEG)) * (1 / Math.cos(c2.lat / RAD2DEG))])).addTo(maps[1]);
+	}
+	document.addEventListener("DOMContentLoaded", main);
+</script>
+<style>
+	body {
+		display: flex;
+		margin: 0;
+	}
+
+	map {
+		display: block;
+		height: 100%;
+		width: 50%;
+	}
+
+	.leaflet-touch .leaflet-draw-toolbar .leaflet-draw-draw-marker,
+	.leaflet-touch .leaflet-draw-toolbar .leaflet-draw-draw-polyline,
+	.leaflet-touch .leaflet-draw-toolbar .leaflet-draw-draw-rectangle,
+	.leaflet-touch .leaflet-draw-toolbar .leaflet-draw-draw-circle,
+	.leaflet-touch .leaflet-draw-toolbar .leaflet-draw-draw-circlemarker {
+		display: none;
+	}
+
+	#b1 {
+		position: fixed;
+		right: 1rem;
+		top: 50%;
+		z-index: 400;
+	}
+</style> <map id="map0"></map> <map id="map1"></map> <button id="b1">Draw triangle here or use the polygon tool (in the left toolbox)</button>
